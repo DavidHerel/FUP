@@ -1,0 +1,254 @@
+#lang scheme
+
+;----Functions for help------
+
+;get X and Y coord (middle element in position)
+(define (coordXY position) (cadr position))
+
+;takes first element from XY coords (Xs)
+(define (coordX position) (car (coordXY position)))
+
+;take second element from XY cords (Y)
+(define (coordY position) (cadr(coordXY position)))
+
+;get maze in 2D (first element in position)
+(define (2D-maze position) (car position))
+
+;get orientation (last element in positiion)
+(define (orientation position) (caddr position))
+
+;get procedure name
+(define (get-proc-name program)
+ (cadr (car program)))
+
+;north block
+(define (find-north-block position)
+  (find-n-block (find-n-block (2D-maze position) 0 (- (coordY position) 1)) 0 (coordX position))
+)
+
+;south
+(define (find-south-block position)
+  (find-n-block (find-n-block (2D-maze position) 0 (+ (coordY position) 1)) 0 (coordX position))
+)
+;east
+(define (find-east-block position)
+  (find-n-block (find-n-block (2D-maze position) 0 (coordY position)) 0 (+ (coordX position) 1))
+)
+
+;west
+(define (find-west-block position)
+  (find-n-block (find-n-block (2D-maze position) 0 (coordY position)) 0 (- (coordX position) 1))
+)
+
+;now position
+(define (find-curr-block position)
+  (find-n-block (find-n-block (2D-maze position) 0 (coordY position)) 0 (coordX position))
+)
+
+;function will apply fn on 1d array
+(define (apply-at fn list pos)
+  (cond ((= pos 0) (cons (fn (car list)) (cdr list)))
+        (#t (cons (car list) (apply-at fn (cdr list) (- pos 1))))
+  )
+)
+
+;function will apply fn on 2d array       
+(define (apply-2D fn x y list-of-lists)
+  (apply-at (lambda (line)
+              (apply-at fn line x)
+             ) list-of-lists y)
+)
+
+;find n-field
+(define (find-n-block position acc coord)
+  (cond
+    ((= acc coord) (car position))
+    (#t (find-n-block (cdr position) (+ acc 1) coord))
+  )
+)
+
+(define (increase x)
+  (+ x 1))
+
+(define (decrease x)
+  (- x 1))
+
+;------Program needed functions----
+
+;-----Conditions-----
+
+(define (north? position)
+  (eqv? (orientation position) 'north)
+)
+
+(define (south? position)
+  (eqv? (orientation position) 'south)
+)
+
+(define (east? position)
+  (eqv? (orientation position) 'east)
+)
+
+(define (west? position)
+  (eqv? (orientation position) 'west)
+)
+
+
+(define (mark? position) 
+   (> (find-curr-block position) 0)
+)
+
+
+(define (wall? position)
+  (cond    
+    ((north? position) 
+     (eqv? 'w (find-north-block position)))
+    ((south? position)
+     (eqv? 'w (find-south-block position)))
+    ((east? position)
+     (eqv? 'w (find-east-block position)))
+    ((west? position)
+     (eqv? 'w (find-west-block position)))
+    )
+)
+
+
+
+;------Basic functions----> 
+
+
+(define (step position steps-made)
+  (cond
+    ((wall? position)
+        (list steps-made position))
+    ((north? position)
+       (list (2D-maze position) (list (coordX position) (- (coordY position) 1)) (orientation position)))
+    ((west? position)
+       (list (2D-maze position) (list (- (coordX position) 1) (coordY position)) (orientation position)))
+    ((east? position)
+       (list (2D-maze position) (list (+ (coordX position) 1) (coordY position)) (orientation position)))
+    ((south? position)
+        (list (2D-maze position) (list (coordX position) (+ (coordY position) 1)) (orientation position)))
+    )
+)
+
+(require racket/trace)
+;(trace step)
+
+(define (turn-left position)
+  (cond    
+    ((north? position)
+       (list (2D-maze position) (coordXY position) 'west))
+    ((west? position)
+       (list (2D-maze position) (coordXY position) 'south))
+    ((east? position)
+       (list (2D-maze position) (coordXY position) 'north))
+    ((south? position)
+        (list (2D-maze position) (coordXY position) 'east))
+    )
+)
+
+
+;(require racket/trace)
+;(trace turn-left)
+
+(define (get-mark position steps-made)
+  (if (mark? position)
+  (list (apply-2D decrease (coordX position) (coordY position) (2D-maze position)) (coordXY position) (orientation position))
+    (list steps-made position)))
+
+(define (put-mark position)
+  (list (apply-2D increase (coordX position) (coordY position) (2D-maze position)) (coordXY position) (orientation position)))
+
+
+
+
+;-------Simulate function----
+
+(define (simulate position expr program limit)
+  (input-to-simulate-basic position expr program limit)
+)
+
+(define (input-to-simulate-basic position expr program limit)
+  (cond ((list? expr) (simulate-basic position expr program limit '() ))
+      (#t (simulate-basic position (list expr) program limit '()))
+  )
+)
+
+(define (simulate-basic position expr program limit steps-made)
+  (if (null? expr) (list steps-made position)
+      (let ((move (car expr)))
+        (cond
+          ((eqv? 'step move) (if (wall? position) (list steps-made position) (simulate-basic (step position steps-made) (cdr expr) program limit (append steps-made '(step)))))
+          ((eqv? 'get-mark move) (if (mark? position) (list steps-made position) (simulate-basic (get-mark position steps-made) (cdr expr) program limit (append steps-made '(get-mark)))))
+          ((eqv? 'put-mark move) (simulate-basic (put-mark position) (cdr expr) program limit (append steps-made '(put-mark))))
+          ((eqv? 'turn-left move) (simulate-basic (turn-left position) (cdr expr) program limit (append steps-made '(turn-left))))
+          (#t (do-procedure position program (- limit 1) steps-made (append (get-procedures program move) '(end)) (cdr expr)))
+         )
+       )
+   )
+)
+
+;function to take procedures
+(define (get-procedures program proc-name)
+  (if (eqv? (get-proc-name program) proc-name) (caddr (car program)) (get-procedures (cdr program) proc-name)))
+
+(define (to-list n)
+  (if (list? n) n (list n))
+)
+
+(require racket/trace)
+;(trace get-procedures)
+
+
+
+
+;takes procedure list and make it right
+(define (do-procedure position program limit steps-made do-now do-later)
+    (cond
+    ((< limit 0) (list steps-made position))
+     ((null? do-now) (simulate-basic position do-later program limit steps-made))
+     ;IF and (...)
+     ((and (list? (car do-now)) (eqv? 'if (car (car do-now))))
+      (if
+           (or (and (north? position) (eqv? (cadr (car do-now)) 'north?)) (and (wall? position) (eqv? (cadr (car do-now)) 'wall?))
+                     (and (mark? position) (eqv? (cadr (car do-now)) 'mark?)))
+           ;if true
+            (do-procedure position program limit steps-made (append (to-list (car (cdr (cdr (car do-now))))) (to-list (cdr do-now))) do-later)
+            ;else 
+            (do-procedure position program limit steps-made (append (to-list (cadr (cdr (cdr (car do-now))))) (to-list (cdr do-now))) do-later)
+         )
+      )
+     ((eqv? (car do-now) 'if)
+      
+         (if
+           (or (and (north? position) (eqv? (cadr do-now) 'north?)) (and (wall? position) (eqv? (cadr do-now) 'wall?))
+                     (and (mark? position) (eqv? (cadr do-now) 'mark?)))
+           ;if true
+            (do-procedure position program limit steps-made (append (to-list (car (cdr (cdr do-now)))) (to-list (cddddr do-now))) do-later)
+            ;else 
+            (do-procedure position program limit steps-made (append (to-list (car (cdr (cdr (cdr do-now))))) (to-list (cddddr do-now))) do-later)
+         )
+     )
+     ((eqv? 'end (car do-now)) (do-procedure position program (+ limit 1) steps-made (cdr do-now) do-later))
+     ((eqv? 'step (car do-now)) (if (wall? position) (list steps-made position) (do-procedure (step position steps-made) program limit (append steps-made '(step)) (cdr do-now) do-later)))
+     ((eqv? 'get-mark (car do-now)) (if (mark? position) (do-procedure (get-mark position steps-made) program limit (append steps-made '(get-mark)) (cdr do-now) do-later) (list steps-made position)))
+     ((eqv? 'put-mark (car do-now)) (do-procedure (put-mark position) program limit (append steps-made '(put-mark)) (cdr do-now) do-later))
+     ((eqv? 'turn-left (car do-now)) (do-procedure (turn-left position) program limit (append steps-made '(turn-left)) (cdr do-now) do-later))
+     ;another procedure
+     (#t (do-procedure position program (- limit 1) steps-made (append (get-procedures program (car do-now)) '(end) (cdr do-now)) do-later))
+  )
+)
+
+
+(require racket/trace)
+(trace simulate-basic)
+
+
+(require racket/trace)
+;(trace find-curr-block)
+;(trace wall?)
+;(trace mark?)
+(trace do-procedure)
+
+
