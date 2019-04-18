@@ -1,6 +1,9 @@
+--otypovani
+double :: Int -> Int
 double x = x +x
 quad x = double (double x)
 
+fact1 :: Int -> Int
 fact1 1 = 1
 fact1 n = n * fact1 (n-1)
 
@@ -82,5 +85,16 @@ qsort2(x:xs) = qsort smalls ++ [x] ++ qsort larges
     where
         smalls = [a | a <-xs, a <=x]
         larges = [b | b <-xs, b > x]
+        
+--prednaska 9
+--carrying
+add' :: Int -> (Int -> Int)
+add' x y  = x+y
+--inc = add' 1
+-- in 5
+--vrati 6
+
+
+
 
 
